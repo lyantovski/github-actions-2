@@ -1,0 +1,82 @@
+name: Azure Terraform CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  # Defaults - update these or provide repository secrets if needed
+  PREFIX: gha2
+  LOCATION: swedencentral
+  IMAGE_NAME: ghapp
+  TAG: ${{ github.sha }}
+
+  # Optionally set these secrets in the repo to use an existing ACR
+  # AZURE_ACR_NAME and AZURE_ACR_RG are expected as repository secrets
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      ACR_NAME: ${{ secrets.AZURE_ACR_NAME }}
+      ACR_RG: ${{ secrets.AZURE_ACR_RG }}
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init
+
+  # NOTE: using an existing ACR provided via secrets. The workflow requires
+  # AZURE_ACR_NAME and AZURE_ACR_RG to be set in repository secrets.
+
+      - name: Resolve ACR login server (using provided ACR)
+        run: |
+          if [ -z "$ACR_NAME" ] || [ -z "$ACR_RG" ]; then
+            echo "Error: AZURE_ACR_NAME and AZURE_ACR_RG repository secrets must be set"
+            exit 1
+          fi
+          echo "Using existing ACR: $ACR_NAME in RG $ACR_RG"
+          REGISTRY=$(az acr show -n $ACR_NAME --query loginServer -o tsv)
+          echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
+          echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+          echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
+
+      - name: Build and push image to ACR
+        run: |
+          if [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ]; then
+            echo "$ACR_PASSWORD" | docker login $REGISTRY --username $ACR_USERNAME --password-stdin
+          else
+            az acr login -n $ACR_NAME
+          fi
+          docker build -t $REGISTRY/${{ env.IMAGE_NAME }}:${{ env.TAG }} -f Dockerfile .
+          docker push $REGISTRY/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+
+      - name: Terraform Apply - create/update resources and configure Web App
+        run: |
+          cd terraform
+          terraform apply -auto-approve \
+            -var="prefix=${{ env.PREFIX }}" \
+            -var="location=${{ env.LOCATION }}" \
+            -var="image_name=${{ env.IMAGE_NAME }}" \
+            -var="image_tag=${{ env.TAG }}" \
+            -var="use_existing_acr=true" \
+            -var="existing_acr_name=${{ env.ACR_NAME }}" \
+            -var="existing_acr_rg=${{ env.ACR_RG }}" \
+            -var="acr_admin_username=${{ env.ACR_USERNAME }}" \
+            -var="acr_admin_password=${{ env.ACR_PASSWORD }}"
