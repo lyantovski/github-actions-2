@@ -19,11 +19,19 @@ COPY --from=builder /app/public /usr/share/nginx/html/public
 # Copy the HTML entrypoint
 COPY index.html /usr/share/nginx/html/index.html
 
-# Copy custom, hardened nginx configuration
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Copy custom, hardened nginx configuration (template)
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf.template
+
+# Install envsubst (from gettext) so we can substitute ${PORT} at container start
+RUN apk add --no-cache gettext
+
+# Copy entrypoint
+COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Ensure permissions are correct for the nginx user
 RUN chown -R nginx:nginx /usr/share/nginx/html
 
 EXPOSE 80
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
