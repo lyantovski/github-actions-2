@@ -21,8 +21,10 @@ jobs:
     env:
       ACR_NAME: ${{ secrets.AZURE_ACR_NAME }}
       ACR_RG: ${{ secrets.AZURE_ACR_RG }}
-      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+  ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+  ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+  ACR_ID: ${{ secrets.AZURE_ACR_ID }}
+  ACR_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,15 +49,32 @@ jobs:
 
       - name: Resolve ACR login server (using provided ACR)
         run: |
-          if [ -z "$ACR_NAME" ] || [ -z "$ACR_RG" ]; then
-            echo "Error: AZURE_ACR_NAME and AZURE_ACR_RG repository secrets must be set"
-            exit 1
+          # Prefer explicit ACR login server or ACR id if provided
+          if [ -n "$ACR_LOGIN_SERVER" ]; then
+            REGISTRY="$ACR_LOGIN_SERVER"
+            echo "Using provided ACR login server: $REGISTRY"
+            echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
+          elif [ -n "$ACR_ID" ]; then
+            # derive login server from id using az cli
+            REGISTRY=$(az acr show --ids $ACR_ID --query loginServer -o tsv)
+            echo "Using provided ACR id: $ACR_ID -> $REGISTRY"
+            echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
+            # also set ACR_NAME/ACR_RG for terraform compatibility
+            ACR_NAME=$(az acr show --ids $ACR_ID --query name -o tsv)
+            ACR_RG=$(az acr show --ids $ACR_ID --query resourceGroup -o tsv)
+            echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+            echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
+          else
+            if [ -z "$ACR_NAME" ] || [ -z "$ACR_RG" ]; then
+              echo "Error: provide AZURE_ACR_NAME/AZURE_ACR_RG or AZURE_ACR_ID or AZURE_ACR_LOGIN_SERVER as secrets"
+              exit 1
+            fi
+            echo "Using existing ACR: $ACR_NAME in RG $ACR_RG"
+            REGISTRY=$(az acr show -n $ACR_NAME --query loginServer -o tsv)
+            echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
+            echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+            echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
           fi
-          echo "Using existing ACR: $ACR_NAME in RG $ACR_RG"
-          REGISTRY=$(az acr show -n $ACR_NAME --query loginServer -o tsv)
-          echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
-          echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
-          echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
 
       - name: Build and push image to ACR
         run: |
@@ -78,5 +97,7 @@ jobs:
             -var="use_existing_acr=true" \
             -var="existing_acr_name=${{ env.ACR_NAME }}" \
             -var="existing_acr_rg=${{ env.ACR_RG }}" \
+            -var="existing_acr_id=${{ env.ACR_ID }}" \
+            -var="existing_acr_login_server=${{ env.ACR_LOGIN_SERVER }}" \
             -var="acr_admin_username=${{ env.ACR_USERNAME }}" \
             -var="acr_admin_password=${{ env.ACR_PASSWORD }}"

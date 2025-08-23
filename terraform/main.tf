@@ -1,4 +1,5 @@
 resource "azurerm_resource_group" "rg" {
+  count    = var.use_existing_acr ? 0 : 1
   name     = "${var.prefix}-rg"
   location = var.location
 }
@@ -7,30 +8,31 @@ resource "azurerm_resource_group" "rg" {
 resource "azurerm_container_registry" "acr" {
   count               = var.use_existing_acr ? 0 : 1
   name                = "${var.prefix}acr"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = local.target_rg_name
+  location            = var.location
   sku                 = "Basic"
   admin_enabled       = true
 }
 
 # Data source for existing ACR when use_existing_acr = true
 data "azurerm_container_registry" "existing" {
-  count = var.use_existing_acr ? 1 : 0
+  count = var.use_existing_acr && var.existing_acr_id == "" && var.existing_acr_login_server == "" && var.existing_acr_name != "" ? 1 : 0
   name  = var.existing_acr_name
   resource_group_name = var.existing_acr_rg
 }
 
 locals {
-  acr_login_server = var.use_existing_acr ? data.azurerm_container_registry.existing[0].login_server : azurerm_container_registry.acr[0].login_server
-  acr_id = var.use_existing_acr ? data.azurerm_container_registry.existing[0].id : azurerm_container_registry.acr[0].id
+  target_rg_name = var.use_existing_acr ? var.existing_acr_rg : azurerm_resource_group.rg[0].name
+  acr_login_server = var.use_existing_acr ? (var.existing_acr_login_server != "" ? var.existing_acr_login_server : (var.existing_acr_id != "" ? "" : data.azurerm_container_registry.existing[0].login_server)) : azurerm_container_registry.acr[0].login_server
+  acr_id = var.use_existing_acr ? (var.existing_acr_id != "" ? var.existing_acr_id : (var.existing_acr_name != "" ? data.azurerm_container_registry.existing[0].id : azurerm_container_registry.acr[0].id)) : azurerm_container_registry.acr[0].id
   acr_admin_username = var.use_existing_acr ? (var.acr_admin_username != "" ? var.acr_admin_username : "") : azurerm_container_registry.acr[0].admin_username
   acr_admin_password = var.use_existing_acr ? (var.acr_admin_password != "" ? var.acr_admin_password : "") : azurerm_container_registry.acr[0].admin_password
 }
 
 resource "azurerm_service_plan" "plan" {
   name                = "${var.prefix}-plan"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  resource_group_name = local.target_rg_name
   sku_name            = "B1"
   os_type             = "Linux"
 
@@ -39,8 +41,8 @@ resource "azurerm_service_plan" "plan" {
 
 resource "azurerm_linux_web_app" "app" {
   name                = "${var.prefix}-app"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  resource_group_name = local.target_rg_name
   service_plan_id     = azurerm_service_plan.plan.id
 
   site_config {
