@@ -44,13 +44,12 @@ resource "azurerm_linux_web_app" "app" {
   location            = var.location
   resource_group_name = local.target_rg_name
   service_plan_id     = azurerm_service_plan.plan.id
-
-  site_config {
-    linux_fx_version = "DOCKER|${local.acr_login_server}/${var.image_name}:${var.image_tag}"
-  }
-
+  # The provider computes linux_fx_version automatically for Linux container apps
+    site_config {}
+  # Set the container image via the DOCKER_CUSTOM_IMAGE_NAME app setting instead.
   app_settings = merge(
     {
+      "DOCKER_CUSTOM_IMAGE_NAME"   = "${local.acr_login_server}/${var.image_name}:${var.image_tag}"
       "DOCKER_REGISTRY_SERVER_URL" = "https://${local.acr_login_server}"
     },
     local.acr_admin_username != "" && local.acr_admin_password != "" ? {
