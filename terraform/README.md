@@ -34,4 +34,9 @@ In CI, set repository secrets (or environment variables) and workflow env accord
 - `AZURE_ACR_NAME` - existing ACR name
 - `AZURE_ACR_RG` - resource group where ACR exists
 
+Note on ACR name format
+-----------------------
+
+ACR registry names must be lowercase alphanumeric only (no hyphens or uppercase). If your ACR name contains other characters, create a registry with a valid name or provide the registry via the Azure CLI/portal and set `existing_acr_name` accordingly.
+
 The workflow will use the provided ACR to push the Docker image. Terraform will not create a new ACR when `use_existing_acr=true`.
