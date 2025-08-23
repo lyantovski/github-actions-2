@@ -49,34 +49,57 @@ jobs:
       - name: Resolve ACR login server (using provided ACR)
         run: |
           set -euo pipefail
-          # Prefer ACR id if provided, otherwise require ACR name+RG
+
+          fail() {
+            echo "Error: $*" >&2
+            exit 1
+          }
+
+          echo "Resolving ACR login server..."
+
+          # Helper: try to lookup loginServer for given name and optional resource group
+          lookup_registry() {
+            local name="$1"
+            local rg="${2-}"
+            if [ -n "$rg" ]; then
+              az acr show -n "$name" --resource-group "$rg" --query loginServer -o tsv || true
+            else
+              az acr show -n "$name" --query loginServer -o tsv || true
+            fi
+          }
+
+          # Resolution order:
+          # 1) If ACR_ID looks like a full resource id (/subscriptions/...), parse name+rg and use them
+          # 2) If ACR_ID provided but not a full id, treat it as a registry name
+          # 3) Otherwise, use ACR_NAME (try with RG if provided, otherwise name-only lookup)
+
           if [ -n "${ACR_ID-}" ]; then
-            echo "Resolving ACR from id: $ACR_ID"
-            REGISTRY=$(az acr show --ids "$ACR_ID" --query loginServer -o tsv)
-            if [ -z "$REGISTRY" ]; then
-              echo "Error: could not resolve loginServer for ACR id: $ACR_ID"
-              exit 1
+            if [[ "$ACR_ID" == /subscriptions/* ]]; then
+              echo "Parsing ACR resource id: $ACR_ID"
+              ACR_NAME=$(basename "$ACR_ID")
+              ACR_RG=$(echo "$ACR_ID" | sed -n 's|.*/resourceGroups/\([^/]*\)/.*|\1|p')
+              [ -n "$ACR_NAME" ] || fail "could not determine registry name from id"
+              echo "Parsed name=$ACR_NAME resourceGroup=$ACR_RG"
+              REGISTRY=$(lookup_registry "$ACR_NAME" "$ACR_RG")
+            else
+              echo "ACR_ID provided but does not look like a resource id; treating as registry name: $ACR_ID"
+              ACR_NAME="$ACR_ID"
+              REGISTRY=$(lookup_registry "$ACR_NAME" "${ACR_RG-}")
             fi
-            echo "Using provided ACR id: $ACR_ID -> $REGISTRY"
-            echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
-            # also set ACR_NAME/ACR_RG for terraform compatibility
-            ACR_NAME=$(az acr show --ids "$ACR_ID" --query name -o tsv)
-            ACR_RG=$(az acr show --ids "$ACR_ID" --query resourceGroup -o tsv)
-            echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
-            echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
           else
-            if [ -z "${ACR_NAME-}" ] || [ -z "${ACR_RG-}" ]; then
-              echo "Error: provide AZURE_ACR_NAME and AZURE_ACR_RG, or AZURE_ACR_ID as secrets"
-              exit 1
-            fi
-            echo "Using existing ACR: $ACR_NAME in RG $ACR_RG"
-            REGISTRY=$(az acr show -n "$ACR_NAME" --resource-group "$ACR_RG" --query loginServer -o tsv)
-            if [ -z "$REGISTRY" ]; then
-              echo "Error: could not resolve loginServer for ACR name: $ACR_NAME in RG: $ACR_RG"
-              exit 1
-            fi
-            echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
-            echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+            [ -n "${ACR_NAME-}" ] || fail "provide AZURE_ACR_NAME or AZURE_ACR_ID as a secret"
+            echo "Using ACR name: $ACR_NAME (resource group: ${ACR_RG-})"
+            REGISTRY=$(lookup_registry "$ACR_NAME" "${ACR_RG-}")
+          fi
+
+          if [ -z "${REGISTRY-}" ] || [ -z "$REGISTRY" ]; then
+            fail "could not resolve loginServer for ACR name='$ACR_NAME' (rg='${ACR_RG-}') - ensure the name and resource group are correct and the logged-in Azure identity has permission to read the registry"
+          fi
+
+          echo "Resolved registry: $REGISTRY"
+          echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
+          echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+          if [ -n "${ACR_RG-}" ]; then
             echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
           fi
 
