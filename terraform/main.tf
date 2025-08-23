@@ -27,17 +27,14 @@ locals {
   acr_admin_password = var.use_existing_acr ? (var.acr_admin_password != "" ? var.acr_admin_password : "") : azurerm_container_registry.acr[0].admin_password
 }
 
-resource "azurerm_app_service_plan" "plan" {
+resource "azurerm_service_plan" "plan" {
   name                = "${var.prefix}-plan"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   kind                = "Linux"
   reserved            = true
-
-  sku {
-    tier = "Basic"
-    size = "B1"
-  }
+  sku_name = "B1"
+  os_type  = "Linux"
 }
 
 resource "azurerm_linux_web_app" "app" {
@@ -75,7 +72,7 @@ resource "random_uuid" "role_id" {}
 resource "azurerm_role_assignment" "acr_pull" {
   scope                = local.acr_id
   role_definition_name = "AcrPull"
-  principal_id         = azurerm_linux_web_app.app.identity.principal_id
+  principal_id         = azurerm_linux_web_app.app.identity[0].principal_id
   name                 = random_uuid.role_id.result
   depends_on           = [azurerm_linux_web_app.app]
 }
