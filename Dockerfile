@@ -4,7 +4,8 @@ WORKDIR /app
 
 # Copy package manifests first to install dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev || npm install
+# Install all dependencies (including devDependencies) in the builder so webpack and webpack-cli are available
+RUN npm ci || npm install
 
 # Copy source and build
 COPY . .
