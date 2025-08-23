@@ -27,8 +27,8 @@ variable "existing_acr_name" {
   type    = string
   default = ""
   validation {
-  condition     = var.existing_acr_name == "" || var.existing_acr_id != "" || var.existing_acr_login_server != "" || can(regex("^[a-z0-9]+$", var.existing_acr_name))
-  error_message = "existing_acr_name must be empty or contain only lowercase alphanumeric characters (no hyphens), or provide existing_acr_id/existing_acr_login_server instead."
+  condition     = var.existing_acr_name == "" || can(regex("^[a-z0-9]+$", var.existing_acr_name))
+  error_message = "existing_acr_name must be empty or contain only lowercase alphanumeric characters (no hyphens). If your registry name contains other characters, provide existing_acr_id or existing_acr_login_server instead."
   }
 }
 
