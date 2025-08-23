@@ -31,17 +31,17 @@ resource "azurerm_service_plan" "plan" {
   name                = "${var.prefix}-plan"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  kind                = "Linux"
-  reserved            = true
-  sku_name = "B1"
-  os_type  = "Linux"
+  sku_name            = "B1"
+  os_type             = "Linux"
+
+  # 'kind' and 'reserved' are computed by the provider and must not be set.
 }
 
 resource "azurerm_linux_web_app" "app" {
   name                = "${var.prefix}-app"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  service_plan_id     = azurerm_app_service_plan.plan.id
+  service_plan_id     = azurerm_service_plan.plan.id
 
   site_config {
     linux_fx_version = "DOCKER|${local.acr_login_server}/${var.image_name}:${var.image_tag}"
