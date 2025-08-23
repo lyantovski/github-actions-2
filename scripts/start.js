@@ -2,7 +2,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const port = process.env.PORT || 8081;
+const port = process.env.PORT || 80;
 const dist = path.join(__dirname, '..', 'dist');
 
 if (fs.existsSync(dist) && fs.statSync(dist).isDirectory()) {
