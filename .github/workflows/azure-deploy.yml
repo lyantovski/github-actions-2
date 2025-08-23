@@ -48,24 +48,33 @@ jobs:
 
       - name: Resolve ACR login server (using provided ACR)
         run: |
+          set -euo pipefail
           # Prefer ACR id if provided, otherwise require ACR name+RG
-          if [ -n "$ACR_ID" ]; then
-            # derive login server from id using az cli
-            REGISTRY=$(az acr show --ids $ACR_ID --query loginServer -o tsv)
+          if [ -n "${ACR_ID-}" ]; then
+            echo "Resolving ACR from id: $ACR_ID"
+            REGISTRY=$(az acr show --ids "$ACR_ID" --query loginServer -o tsv)
+            if [ -z "$REGISTRY" ]; then
+              echo "Error: could not resolve loginServer for ACR id: $ACR_ID"
+              exit 1
+            fi
             echo "Using provided ACR id: $ACR_ID -> $REGISTRY"
             echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
             # also set ACR_NAME/ACR_RG for terraform compatibility
-            ACR_NAME=$(az acr show --ids $ACR_ID --query name -o tsv)
-            ACR_RG=$(az acr show --ids $ACR_ID --query resourceGroup -o tsv)
+            ACR_NAME=$(az acr show --ids "$ACR_ID" --query name -o tsv)
+            ACR_RG=$(az acr show --ids "$ACR_ID" --query resourceGroup -o tsv)
             echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
             echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
           else
-            if [ -z "$ACR_NAME" ] || [ -z "$ACR_RG" ]; then
-              echo "Error: provide AZURE_ACR_NAME/AZURE_ACR_RG or AZURE_ACR_ID as secrets"
+            if [ -z "${ACR_NAME-}" ] || [ -z "${ACR_RG-}" ]; then
+              echo "Error: provide AZURE_ACR_NAME and AZURE_ACR_RG, or AZURE_ACR_ID as secrets"
               exit 1
             fi
             echo "Using existing ACR: $ACR_NAME in RG $ACR_RG"
-            REGISTRY=$(az acr show -n $ACR_NAME --query loginServer -o tsv)
+            REGISTRY=$(az acr show -n "$ACR_NAME" --resource-group "$ACR_RG" --query loginServer -o tsv)
+            if [ -z "$REGISTRY" ]; then
+              echo "Error: could not resolve loginServer for ACR name: $ACR_NAME in RG: $ACR_RG"
+              exit 1
+            fi
             echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
             echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
             echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
