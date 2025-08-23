@@ -125,5 +125,6 @@ jobs:
             -var="existing_acr_name=${{ env.ACR_NAME }}" \
             -var="existing_acr_rg=${{ env.ACR_RG }}" \
             -var="existing_acr_id=${{ env.ACR_ID }}" \
+            -var="container_port=80" \
             -var="acr_admin_username=${{ env.ACR_USERNAME }}" \
             -var="acr_admin_password=${{ env.ACR_PASSWORD }}"

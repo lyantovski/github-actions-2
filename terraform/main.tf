@@ -51,6 +51,7 @@ resource "azurerm_linux_web_app" "app" {
     {
       "DOCKER_CUSTOM_IMAGE_NAME"   = "${local.acr_login_server}/${var.image_name}:${var.image_tag}"
       "DOCKER_REGISTRY_SERVER_URL" = "https://${local.acr_login_server}"
+      "WEBSITES_PORT" = var.container_port
     },
     local.acr_admin_username != "" && local.acr_admin_password != "" ? {
       "DOCKER_REGISTRY_SERVER_USERNAME" = local.acr_admin_username
