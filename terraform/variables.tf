@@ -60,6 +60,6 @@ variable "existing_acr_login_server" {
 
 variable "container_port" {
   type    = string
-  default = "8081"
+  default = "80"
   description = "Port the container listens on. App Service will be configured with WEBSITES_PORT to route traffic to this port."
 }
