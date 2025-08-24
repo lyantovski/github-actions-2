@@ -24,7 +24,9 @@ data "azurerm_container_registry" "existing" {
 locals {
   # Try extracting resource group from existing_acr_id when possible
   # Safely extract resource group from existing_acr_id if present. Use can() to avoid invalid index errors.
-  rg_from_id = can(regexall("resourceGroups/([^/]+)/", var.existing_acr_id)[0][1]) ? regexall("resourceGroups/([^/]+)/", var.existing_acr_id)[0][1] : ""
+  # extract resource group name from an existing resource id by splitting the id
+  # Azure resource id format: /subscriptions/{sub}/resourceGroups/{rg}/providers/...
+  rg_from_id = var.existing_acr_id != "" && can(element(split("/", var.existing_acr_id), 4)) ? element(split("/", var.existing_acr_id), 4) : (can(regexall("resourcegroups/([^/]+)/", lower(var.existing_acr_id))[0][1]) ? regexall("resourcegroups/([^/]+)/", lower(var.existing_acr_id))[0][1] : "")
 
   target_rg_name = var.use_existing_acr ? (
     var.existing_acr_rg != "" ? var.existing_acr_rg : (
