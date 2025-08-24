@@ -135,7 +135,7 @@ jobs:
           terraform init
 
   terraform-plan:
-    needs: terraform-init
+    needs: [resolve-and-build, terraform-init]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -150,6 +150,11 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
+
+      - name: Terraform Init (plan job)
+        run: |
+          cd terraform
+          terraform init
 
       - name: Terraform Plan
         run: |
@@ -160,12 +165,12 @@ jobs:
             -var="image_name=${{ env.IMAGE_NAME }}" \
             -var="image_tag=${{ env.TAG }}" \
             -var="use_existing_acr=true" \
-            -var="existing_acr_name=${{ needs.resolve-and-build.outputs.acr_name }}" \
-            -var="existing_acr_rg=${{ needs.resolve-and-build.outputs.acr_rg }}" \
-            -var="existing_acr_id=${{ env.ACR_ID }}" \
+            -var="existing_acr_name=${{ needs['resolve-and-build'].outputs.acr_name }}" \
+            -var="existing_acr_rg=${{ needs['resolve-and-build'].outputs.acr_rg }}" \
+            -var="existing_acr_id=${{ secrets.AZURE_ACR_ID }}" \
             -var="container_port=80" \
-            -var="acr_admin_username=${{ env.ACR_USERNAME }}" \
-            -var="acr_admin_password=${{ env.ACR_PASSWORD }}"
+            -var="acr_admin_username=${{ secrets.ACR_USERNAME }}" \
+            -var="acr_admin_password=${{ secrets.ACR_PASSWORD }}"
 
       - name: Upload tfplan
         uses: actions/upload-artifact@v4
@@ -176,7 +181,6 @@ jobs:
   terraform-apply:
     needs: terraform-plan
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -190,6 +194,11 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
+
+      - name: Terraform Init (apply job)
+        run: |
+          cd terraform
+          terraform init
 
       - name: Download tfplan
         uses: actions/download-artifact@v4

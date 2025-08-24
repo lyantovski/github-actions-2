@@ -1,0 +1,61 @@
+name: Terraform Apply (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Optional image tag to deploy (defaults to latest or the triggering commit)'
+        required: false
+        default: ''
+
+env:
+  PREFIX: gha2
+  LOCATION: swedencentral
+  IMAGE_NAME: ghapp
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init
+
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          # Resolve image tag: prefer input, fall back to commit SHA, then 'latest'
+          TAG="${{ github.event.inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.sha }}"
+            if [ -z "$TAG" ]; then
+              TAG="latest"
+            fi
+          fi
+
+          terraform apply -auto-approve \
+            -var="prefix=${{ env.PREFIX }}" \
+            -var="location=${{ env.LOCATION }}" \
+            -var="image_name=${{ env.IMAGE_NAME }}" \
+            -var="image_tag=$TAG" \
+            -var="use_existing_acr=true" \
+            -var="existing_acr_name=${{ secrets.AZURE_ACR_NAME }}" \
+            -var="existing_acr_rg=${{ secrets.AZURE_ACR_RG }}" \
+            -var="existing_acr_id=${{ secrets.AZURE_ACR_ID }}" \
+            -var="container_port=80" \
+            -var="acr_admin_username=${{ secrets.ACR_USERNAME }}" \
+            -var="acr_admin_password=${{ secrets.ACR_PASSWORD }}"
