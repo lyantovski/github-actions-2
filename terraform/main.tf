@@ -23,7 +23,8 @@ data "azurerm_container_registry" "existing" {
 
 locals {
   # Try extracting resource group from existing_acr_id when possible
-  rg_from_id = length(regexall("resourceGroups/([^/]+)/", var.existing_acr_id)) > 0 ? regexall("resourceGroups/([^/]+)/", var.existing_acr_id)[0][1] : ""
+  # Safely extract resource group from existing_acr_id if present. Use can() to avoid invalid index errors.
+  rg_from_id = can(regexall("resourceGroups/([^/]+)/", var.existing_acr_id)[0][1]) ? regexall("resourceGroups/([^/]+)/", var.existing_acr_id)[0][1] : ""
 
   target_rg_name = var.use_existing_acr ? (
     var.existing_acr_rg != "" ? var.existing_acr_rg : (
