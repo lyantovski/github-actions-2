@@ -178,7 +178,17 @@ jobs:
           name: tfplan
           path: terraform/tfplan
 
+      - name: Check for Terraform lockfile
+        id: check_lock
+        run: |
+          if [ -f terraform/.terraform.lock.hcl ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload Terraform lockfile
+        if: steps.check_lock.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: tf_lock
@@ -205,10 +215,20 @@ jobs:
 
 
       - name: Download Terraform lockfile
+        id: download_lock
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: tf_lock
           path: terraform
+
+      - name: Check downloaded lockfile
+        run: |
+          if [ -f terraform/.terraform.lock.hcl ]; then
+            echo "Lockfile downloaded"
+          else
+            echo "No lockfile downloaded; proceeding without lockfile — provider selections may differ from the plan"
+          fi
 
       - name: Download tfplan
         uses: actions/download-artifact@v4
