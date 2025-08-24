@@ -132,7 +132,7 @@ jobs:
       - name: Terraform Init
         run: |
           cd terraform
-          terraform init
+          terraform init -input=false -upgrade
 
   terraform-plan:
     needs: [resolve-and-build, terraform-init]
@@ -154,7 +154,7 @@ jobs:
       - name: Terraform Init (plan job)
         run: |
           cd terraform
-          terraform init
+          terraform init -input=false -upgrade
 
       - name: Terraform Plan
         run: |
@@ -177,6 +177,9 @@ jobs:
         with:
           name: tfplan
           path: terraform/tfplan
+
+      - name: Show terraform dir
+        run: ls -la terraform || true
 
       - name: Check for Terraform lockfile
         id: check_lock
