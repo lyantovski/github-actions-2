@@ -21,18 +21,14 @@ variable "image_tag" {
 variable "use_existing_acr" {
   type    = bool
   default = false
-  validation {
-    condition     = !(var.use_existing_acr == true && var.existing_acr_name == "" && var.existing_acr_id == "" && var.existing_acr_login_server == "")
-    error_message = "When use_existing_acr is true you must provide at least one of existing_acr_name, existing_acr_id, or existing_acr_login_server."
-  }
 }
 
 variable "existing_acr_name" {
   type    = string
   default = ""
   validation {
-  condition     = var.existing_acr_name == "" || can(regex("^[a-z0-9]+$", var.existing_acr_name))
-  error_message = "existing_acr_name must be empty or contain only lowercase alphanumeric characters (no hyphens). If your registry name contains other characters, provide existing_acr_id or existing_acr_login_server instead."
+  condition     = var.existing_acr_name == "" || can(regex("^[a-z0-9]+$", lower(var.existing_acr_name)))
+  error_message = "existing_acr_name must be empty or only contain alphanumeric characters; uppercase will be lowercased automatically. If your registry name contains other characters, provide existing_acr_id or existing_acr_login_server instead."
   }
 }
 

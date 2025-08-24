@@ -44,6 +44,17 @@ locals {
   acr_admin_password = var.use_existing_acr ? (var.acr_admin_password != "" ? var.acr_admin_password : "") : (can(azurerm_container_registry.acr[0].admin_password) ? azurerm_container_registry.acr[0].admin_password : "")
 }
 
+# Helpful validation hint: when using an existing ACR, ensure at least one identifier is provided.
+locals {
+  acr_input_provided = ! (var.use_existing_acr == true && var.existing_acr_name == "" && var.existing_acr_id == "" && var.existing_acr_login_server == "")
+}
+
+output "acr_validation_hint" {
+  description = "Shows a helpful hint when use_existing_acr = true but no ACR identifier was provided."
+  value       = var.use_existing_acr && !local.acr_input_provided ? "use_existing_acr is true but no existing_acr_name, existing_acr_id or existing_acr_login_server were provided. Provide at least one." : ""
+  sensitive   = false
+}
+
 resource "azurerm_service_plan" "plan" {
   name                = "${var.prefix}-plan"
   location            = var.location
