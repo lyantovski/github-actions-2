@@ -16,7 +16,7 @@ env:
   # AZURE_ACR_NAME and AZURE_ACR_RG are expected as repository secrets
 
 jobs:
-  deploy:
+  resolve-and-build:
     runs-on: ubuntu-latest
     env:
       ACR_NAME: ${{ secrets.AZURE_ACR_NAME }}
@@ -24,6 +24,11 @@ jobs:
       ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
       ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
       ACR_ID: ${{ secrets.AZURE_ACR_ID }}
+    outputs:
+      registry: ${{ steps.set-outputs.outputs.registry }}
+      acr_name: ${{ steps.set-outputs.outputs.acr_name }}
+      acr_rg: ${{ steps.set-outputs.outputs.acr_rg }}
+      image_tag: ${{ steps.set-outputs.outputs.image_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,20 +38,8 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
-
-      - name: Terraform Init
-        run: |
-          cd terraform
-          terraform init
-
-  # NOTE: using an existing ACR provided via secrets. The workflow requires
-  # AZURE_ACR_NAME and AZURE_ACR_RG to be set in repository secrets.
-
       - name: Resolve ACR login server (using provided ACR)
+        id: resolve
         run: |
           set -euo pipefail
 
@@ -57,7 +50,6 @@ jobs:
 
           echo "Resolving ACR login server..."
 
-          # Helper: try to lookup loginServer for given name and optional resource group
           lookup_registry() {
             local name="$1"
             local rg="${2-}"
@@ -67,11 +59,6 @@ jobs:
               az acr show -n "$name" --query loginServer -o tsv || true
             fi
           }
-
-          # Resolution order:
-          # 1) If ACR_ID looks like a full resource id (/subscriptions/...), parse name+rg and use them
-          # 2) If ACR_ID provided but not a full id, treat it as a registry name
-          # 3) Otherwise, use ACR_NAME (try with RG if provided, otherwise name-only lookup)
 
           if [ -n "${ACR_ID-}" ]; then
             if [[ "$ACR_ID" == /subscriptions/* ]]; then
@@ -97,14 +84,17 @@ jobs:
           fi
 
           echo "Resolved registry: $REGISTRY"
-          echo "REGISTRY=$REGISTRY" >> $GITHUB_ENV
-          echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
-          if [ -n "${ACR_RG-}" ]; then
-            echo "ACR_RG=$ACR_RG" >> $GITHUB_ENV
-          fi
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+          echo "acr_name=$ACR_NAME" >> $GITHUB_OUTPUT
+          echo "acr_rg=${ACR_RG-}" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ env.TAG }}" >> $GITHUB_OUTPUT
 
       - name: Build and push image to ACR
         run: |
+          REGISTRY=${{ steps.resolve.outputs.registry }}
+          ACR_NAME=${{ steps.resolve.outputs.acr_name }}
+          ACR_RG=${{ steps.resolve.outputs.acr_rg }}
+
           if [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ]; then
             echo "$ACR_PASSWORD" | docker login $REGISTRY --username $ACR_USERNAME --password-stdin
           else
@@ -113,18 +103,100 @@ jobs:
           docker build -t $REGISTRY/${{ env.IMAGE_NAME }}:${{ env.TAG }} -f Dockerfile .
           docker push $REGISTRY/${{ env.IMAGE_NAME }}:${{ env.TAG }}
 
-      - name: Terraform Apply - create/update resources and configure Web App
+      - name: set-outputs
+        id: set-outputs
+        run: |
+          # pass through values already set in $GITHUB_OUTPUT by resolve step
+          echo "registry=${{ steps.resolve.outputs.registry }}" >> $GITHUB_OUTPUT
+          echo "acr_name=${{ steps.resolve.outputs.acr_name }}" >> $GITHUB_OUTPUT
+          echo "acr_rg=${{ steps.resolve.outputs.acr_rg }}" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ env.TAG }}" >> $GITHUB_OUTPUT
+
+  terraform-init:
+    needs: resolve-and-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init
         run: |
           cd terraform
-          terraform apply -auto-approve \
+          terraform init
+
+  terraform-plan:
+    needs: terraform-init
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Plan
+        run: |
+          cd terraform
+          terraform plan -out=tfplan \
             -var="prefix=${{ env.PREFIX }}" \
             -var="location=${{ env.LOCATION }}" \
             -var="image_name=${{ env.IMAGE_NAME }}" \
             -var="image_tag=${{ env.TAG }}" \
             -var="use_existing_acr=true" \
-            -var="existing_acr_name=${{ env.ACR_NAME }}" \
-            -var="existing_acr_rg=${{ env.ACR_RG }}" \
+            -var="existing_acr_name=${{ needs.resolve-and-build.outputs.acr_name }}" \
+            -var="existing_acr_rg=${{ needs.resolve-and-build.outputs.acr_rg }}" \
             -var="existing_acr_id=${{ env.ACR_ID }}" \
             -var="container_port=80" \
             -var="acr_admin_username=${{ env.ACR_USERNAME }}" \
             -var="acr_admin_password=${{ env.ACR_PASSWORD }}"
+
+      - name: Upload tfplan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: terraform/tfplan
+
+  terraform-apply:
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Download tfplan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+
+      - name: Terraform Apply (manual approval required via environment)
+        run: |
+          cd terraform
+          terraform apply -auto-approve tfplan
