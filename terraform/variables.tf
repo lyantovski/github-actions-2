@@ -21,6 +21,10 @@ variable "image_tag" {
 variable "use_existing_acr" {
   type    = bool
   default = false
+  validation {
+    condition     = !(var.use_existing_acr == true && var.existing_acr_name == "" && var.existing_acr_id == "" && var.existing_acr_login_server == "")
+    error_message = "When use_existing_acr is true you must provide at least one of existing_acr_name, existing_acr_id, or existing_acr_login_server."
+  }
 }
 
 variable "existing_acr_name" {
