@@ -178,10 +178,17 @@ jobs:
           name: tfplan
           path: terraform/tfplan
 
+      - name: Upload Terraform lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: tf_lock
+          path: terraform/.terraform.lock.hcl
+
   terraform-apply:
     needs: terraform-plan
     runs-on: ubuntu-latest
-    environment: 'production'
+    environment:
+      name: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -196,15 +203,24 @@ jobs:
         with:
           terraform_version: 1.10.5
 
-      - name: Terraform Init (apply job)
-        run: |
-          cd terraform
-          terraform init
+
+      - name: Download Terraform lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: tf_lock
+          path: terraform
 
       - name: Download tfplan
         uses: actions/download-artifact@v4
         with:
           name: tfplan
+          path: terraform
+
+      - name: Terraform Init (apply job)
+        run: |
+          cd terraform
+          # use the downloaded .terraform.lock.hcl so provider selections match the plan
+          terraform init -input=false
 
       - name: Terraform Apply (manual approval required via environment)
         run: |
