@@ -22,8 +22,22 @@ data "azurerm_container_registry" "existing" {
 }
 
 locals {
-  target_rg_name = var.use_existing_acr ? var.existing_acr_rg : azurerm_resource_group.rg[0].name
-  acr_login_server = var.use_existing_acr ? (var.existing_acr_login_server != "" ? var.existing_acr_login_server : (var.existing_acr_id != "" ? "" : data.azurerm_container_registry.existing[0].login_server)) : azurerm_container_registry.acr[0].login_server
+  # Try extracting resource group from existing_acr_id when possible
+  rg_from_id = length(regexall("resourceGroups/([^/]+)/", var.existing_acr_id)) > 0 ? regexall("resourceGroups/([^/]+)/", var.existing_acr_id)[0][1] : ""
+
+  target_rg_name = var.use_existing_acr ? (
+    var.existing_acr_rg != "" ? var.existing_acr_rg : (
+      var.existing_acr_id != "" && local.rg_from_id != "" ? local.rg_from_id : (
+        var.existing_acr_name != "" && length(data.azurerm_container_registry.existing) > 0 ? data.azurerm_container_registry.existing[0].resource_group_name : azurerm_resource_group.rg[0].name
+      )
+    )
+  ) : azurerm_resource_group.rg[0].name
+
+  acr_login_server = var.use_existing_acr ? (
+    var.existing_acr_login_server != "" ? var.existing_acr_login_server : (
+      var.existing_acr_id != "" ? "" : data.azurerm_container_registry.existing[0].login_server
+    )
+  ) : azurerm_container_registry.acr[0].login_server
   acr_id = var.use_existing_acr ? (var.existing_acr_id != "" ? var.existing_acr_id : (var.existing_acr_name != "" ? data.azurerm_container_registry.existing[0].id : azurerm_container_registry.acr[0].id)) : azurerm_container_registry.acr[0].id
   acr_admin_username = var.use_existing_acr ? (var.acr_admin_username != "" ? var.acr_admin_username : "") : azurerm_container_registry.acr[0].admin_username
   acr_admin_password = var.use_existing_acr ? (var.acr_admin_password != "" ? var.acr_admin_password : "") : azurerm_container_registry.acr[0].admin_password
