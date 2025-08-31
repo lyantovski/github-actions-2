@@ -1,0 +1,27 @@
+name: Feature Request
+description: Request a Feature
+title: "[Feature Request]: "
+labels: ["enhancement"]
+assignees:
+  - lyantovski@microsoft.com 
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to request a new feature!
+  - type: input
+    id: contact
+    attributes:
+      label: Contact Details
+      description: How can we get in touch with you if we need more info?
+      placeholder: ex. name@microsoft.com
+    validations:
+      required: false
+  - type: textarea
+    id: feature-request
+    attributes:
+      label: Feature Request
+      description: Tell us what feature you would like.
+      value: "Please add this great new feature!"
+    validations:
+      required: true

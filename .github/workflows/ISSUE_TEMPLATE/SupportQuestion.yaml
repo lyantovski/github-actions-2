@@ -1,0 +1,23 @@
+name: Support Question
+description: Support Question
+title: "[Support Question]: "
+labels: ["question"]
+assignees:
+  - lyantovski@microsoft.com
+body:
+  - type: input
+    id: contact
+    attributes:
+      label: Contact Details
+      description: How can we get in touch with you if we need more info?
+      placeholder: ex. name@microsoft.com
+    validations:
+      required: false
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Describe the issue you need support with.
+      value: "Describe the issue you need support with."
+    validations:
+      required: true
